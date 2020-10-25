@@ -51,10 +51,10 @@ suite =
                 testCells =
                     Array.fromList
                         [ { index = ( 1, "A" )
-                          , output = "123"
+                          , output = Main.PlainValue "123"
                           }
                         , { index = ( 2, "A" )
-                          , output = "123"
+                          , output = Main.PlainValue "123"
                           }
                         ]
 
