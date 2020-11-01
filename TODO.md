@@ -1,0 +1,3 @@
+- Add literal support in expressions 
+- Explore supporting expressions referring to other expression values
+- Explore performance slowdown on 1000+ rows

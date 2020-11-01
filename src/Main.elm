@@ -5,6 +5,7 @@ import Browser
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import List.Split
 
 
 
@@ -38,7 +39,8 @@ type Operation
 
 
 type Expression
-    = Expression CellIndex Operation CellIndex
+    = Value CellIndex
+    | SubExpression CellIndex Operation Expression
 
 
 toOperation : String -> Maybe Operation
@@ -99,50 +101,101 @@ toCellIndex rawString =
             Nothing
 
 
+fromCellIndex : CellIndex -> String
+fromCellIndex ( row, col ) =
+    col ++ String.fromInt row
+
+
 isOperator : Char -> Bool
 isOperator str =
     str == '+' || str == '-' || str == '/' || str == '*'
 
 
+type alias ExpressionString =
+    { firstOperand : String
+    , firstOperator : String
+    , restOfTheExpression : String
+    }
 
--- A11*B22
+
+initialExpressionString : ExpressionString
+initialExpressionString =
+    { firstOperand = ""
+    , firstOperator = ""
+    , restOfTheExpression = ""
+    }
+
+
+updateExpressionString : Char -> ExpressionString -> ExpressionString
+updateExpressionString ch ({ firstOperand, firstOperator, restOfTheExpression } as exprStr) =
+    let
+        isOp =
+            isOperator ch
+
+        chSt =
+            String.fromChar ch
+    in
+    case isOp of
+        True ->
+            case firstOperator of
+                "" ->
+                    { exprStr | firstOperator = chSt }
+
+                _ ->
+                    { exprStr | restOfTheExpression = restOfTheExpression ++ chSt }
+
+        False ->
+            case firstOperator of
+                "" ->
+                    { exprStr | firstOperand = firstOperand ++ chSt }
+
+                _ ->
+                    { exprStr | restOfTheExpression = restOfTheExpression ++ chSt }
+
+
+splitStringIntoExpression : String -> ExpressionString
+splitStringIntoExpression str =
+    String.foldl
+        updateExpressionString
+        initialExpressionString
+        str
 
 
 toExpression : String -> Maybe Expression
-toExpression rawString =
+toExpression exprString =
     let
-        exprString =
-            String.dropLeft 1 rawString
-
-        ( op, _ ) =
-            exprString
-                |> String.toList
-                |> List.partition isOperator
-                |> Tuple.mapFirst String.fromList
-
-        ( c1, c2 ) =
-            case String.split op exprString of
-                [ y, z ] ->
-                    ( Just y, Just z )
-
-                _ ->
-                    ( Nothing, Nothing )
-
-        ops =
-            toOperation op
-
-        c11 =
-            Maybe.andThen (\x -> toCellIndex x) c1
-
-        c22 =
-            Maybe.andThen (\x -> toCellIndex x) c2
+        cellIndex =
+            toCellIndex exprString
     in
-    Maybe.map3 (\x y z -> Expression x y z) c11 ops c22
+    case cellIndex of
+        Just c ->
+            Just (Value c)
+
+        Nothing ->
+            let
+                { firstOperand, firstOperator, restOfTheExpression } =
+                    splitStringIntoExpression exprString
+
+                operandIndex =
+                    toCellIndex firstOperand
+
+                operator =
+                    toOperation firstOperator
+            in
+            Maybe.map3 (\c o cc -> SubExpression c o cc)
+                operandIndex
+                operator
+                (toExpression restOfTheExpression)
 
 
 toExpressionString : Expression -> String
-toExpressionString (Expression ( r1, c1 ) op ( r2, c2 )) =
-    "=" ++ c1 ++ String.fromInt r1 ++ fromOperation op ++ c2 ++ String.fromInt r2
+toExpressionString expr =
+    case expr of
+        Value cellIndex ->
+            fromCellIndex cellIndex
+
+        SubExpression cellIndex operator restOfTheExpression ->
+            fromCellIndex cellIndex ++ fromOperation operator ++ toExpressionString restOfTheExpression
 
 
 findCellFromCellIndex :
@@ -169,46 +222,49 @@ calculationOperation operator ( op1, op2 ) =
             op1 * op2
 
 
+getValueFromCellIndex : CellIndex -> Array { a | index : CellIndex, output : CellOutput } -> Maybe Float
+getValueFromCellIndex cellIndex cells =
+    cellIndex
+        |> findCellFromCellIndex cells
+        |> Maybe.map .output
+        |> Maybe.andThen
+            (\x ->
+                case x of
+                    PlainValue v ->
+                        Just
+                            v
+
+                    ComputedValue v ->
+                        Nothing
+            )
+        |> Maybe.andThen String.toFloat
+
+
 evaluateExpression :
     Expression
     -> Array { a | index : CellIndex, output : CellOutput }
     -> Maybe Float
-evaluateExpression (Expression operand1Index operator operand2Index) cells =
-    let
-        operand1 =
-            operand1Index
-                |> findCellFromCellIndex cells
-                |> Maybe.map .output
-                |> Maybe.andThen
-                    (\x ->
-                        case x of
-                            PlainValue v ->
-                                Just v
+evaluateExpression expr cells =
+    case expr of
+        Value cellIndex ->
+            getValueFromCellIndex
+                cellIndex
+                cells
 
-                            ComputedValue v ->
-                                Nothing
-                    )
-                |> Maybe.andThen String.toFloat
+        SubExpression cellIndex operator restOfTheExpr ->
+            let
+                valueOfFirstOperand =
+                    getValueFromCellIndex cellIndex cells
 
-        operand2 =
-            operand2Index
-                |> findCellFromCellIndex cells
-                |> Maybe.map .output
-                |> Maybe.andThen
-                    (\x ->
-                        case x of
-                            PlainValue v ->
-                                Just v
+                valueOfRestOfTheExpr =
+                    evaluateExpression restOfTheExpr cells
 
-                            ComputedValue v ->
-                                Nothing
-                    )
-                |> Maybe.andThen String.toFloat
-
-        operands =
-            Maybe.map2 (\x y -> ( x, y )) operand1 operand2
-    in
-    Maybe.map (calculationOperation operator) operands
+                operands =
+                    Maybe.map2 (\x y -> ( x, y )) valueOfFirstOperand valueOfRestOfTheExpr
+            in
+            Maybe.map
+                (calculationOperation operator)
+                operands
 
 
 expressionOutput : Maybe Float -> String
@@ -218,7 +274,7 @@ expressionOutput vf =
             String.fromFloat output
 
         Nothing ->
-            "Error"
+            "Error, couldn't evaluate expression"
 
 
 expressionResult :
@@ -231,19 +287,16 @@ expressionResult expr cells =
 
 resolveCellOutput : Array Cell -> Cell -> Cell
 resolveCellOutput cells ({ value } as cell) =
-    let
-        outOrNothing =
-            toExpression value
-
-        o =
-            case outOrNothing of
+    -- first character equals =, rest is expression string
+    { cell
+        | output =
+            case toExpression (String.dropLeft 1 value) of
                 Just v ->
                     ComputedValue v
 
                 Nothing ->
-                    PlainValue "Error"
-    in
-    { cell | output = o }
+                    PlainValue "Error, invalid expression"
+    }
 
 
 type alias CellIndex =
@@ -273,9 +326,14 @@ subscriptions model =
     Sub.none
 
 
-characters : List Char
-characters =
+columnNames : List Char
+columnNames =
     String.toList "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+noOfRows : Int
+noOfRows =
+    100
 
 
 init : a -> ( Model, Cmd Msg )
@@ -284,7 +342,7 @@ init v =
             Array.fromList
                 (List.range
                     1
-                    10
+                    noOfRows
                     |> List.concatMap
                         (\i ->
                             List.map
@@ -295,7 +353,7 @@ init v =
                                     , editing = False
                                     }
                                 )
-                                characters
+                                columnNames
                         )
                 )
       }
@@ -303,7 +361,8 @@ init v =
     )
 
 
-updateCellValue cells cellIndex v =
+updateCellOutput : Array Cell -> Int -> Array Cell
+updateCellOutput cells cellIndex =
     let
         cellToUpdate =
             Array.get cellIndex cells
@@ -315,18 +374,30 @@ updateCellValue cells cellIndex v =
         Just cell ->
             let
                 updatedCell =
-                    { cell | value = v }
-
-                newCell =
-                    if String.startsWith "=" v then
-                        resolveCellOutput cells updatedCell
+                    if String.startsWith "=" cell.value then
+                        resolveCellOutput cells cell
 
                     else
-                        { updatedCell | output = PlainValue v }
+                        { cell | output = PlainValue cell.value }
             in
-            Array.set cellIndex newCell cells
+            Array.set cellIndex updatedCell cells
 
 
+updateCellValue : Array { a | value : c } -> Int -> c -> Array { a | value : c }
+updateCellValue cells cellIndex v =
+    let
+        cellToUpdate =
+            Array.get cellIndex cells
+    in
+    case cellToUpdate of
+        Nothing ->
+            cells
+
+        Just cell ->
+            Array.set cellIndex { cell | value = v } cells
+
+
+updateCellEditing : Array { a | editing : c } -> Int -> c -> Array { a | editing : c }
 updateCellEditing cells cellIndex v =
     let
         cellToUpdate =
@@ -337,11 +408,7 @@ updateCellEditing cells cellIndex v =
             cells
 
         Just cell ->
-            let
-                newCell =
-                    { cell | editing = v }
-            in
-            Array.set cellIndex newCell cells
+            Array.set cellIndex { cell | editing = v } cells
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -354,7 +421,11 @@ update msg { cells } =
             ( { cells = updateCellEditing cells cellIndex True }, Cmd.none )
 
         CellUnEditable cellIndex ->
-            ( { cells = updateCellEditing cells cellIndex False }, Cmd.none )
+            let
+                newCells =
+                    updateCellOutput cells cellIndex
+            in
+            ( { cells = updateCellEditing newCells cellIndex False }, Cmd.none )
 
 
 showValue : Cell -> Array Cell -> String
@@ -371,21 +442,50 @@ showValue cell cells =
                 expressionResult expr cells
 
 
+
+-- VIEW
+
+
+view : Model -> Html Msg
 view model =
     div []
         [ text "spreadsheet"
-        , div [] <|
-            Array.toList
-                (Array.indexedMap
-                    (\index cell ->
-                        input
-                            [ value <| showValue cell model.cells
-                            , onClick <| CellEditable index
-                            , onBlur <| CellUnEditable index
-                            , onInput (\v -> CellValueChanged index v)
-                            ]
-                            []
-                    )
-                    model.cells
-                )
+        , model.cells
+            |> spreadSheetView
+            |> div [ style "overflow" "auto" ]
         ]
+
+
+spreadSheetView : Array Cell -> List (Html Msg)
+spreadSheetView cells =
+    let
+        rowsWithColumns =
+            cells
+                |> Array.toList
+                |> List.Split.chunksOfLeft (List.length columnNames)
+    in
+    List.indexedMap
+        (\rowIndex row -> rowView row rowIndex cells)
+        rowsWithColumns
+
+
+rowView : List Cell -> Int -> Array Cell -> Html Msg
+rowView row rowIndex cells =
+    div [ style "white-space" "nowrap" ]
+        (List.indexedMap
+            (\colIndex cell ->
+                cellView cells cell (26 * rowIndex + colIndex)
+            )
+            row
+        )
+
+
+cellView : Array Cell -> Cell -> Int -> Html Msg
+cellView cells cell index =
+    input
+        [ value <| showValue cell cells
+        , onClick <| CellEditable index
+        , onBlur <| CellUnEditable index
+        , onInput <| CellValueChanged index
+        ]
+        []
