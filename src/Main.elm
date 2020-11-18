@@ -38,9 +38,14 @@ type Operation
     | Divide
 
 
+type Literal
+    = CellIndex CellIndex
+    | Constant Float
+
+
 type Expression
-    = Value CellIndex
-    | SubExpression CellIndex Operation Expression
+    = Value Literal
+    | SubExpression Literal Operation Expression
 
 
 toOperation : String -> Maybe Operation
@@ -166,10 +171,26 @@ toExpression exprString =
     let
         cellIndex =
             toCellIndex exprString
+
+        constant =
+            String.toFloat exprString
+
+        literal =
+            case constant of
+                Just c ->
+                    Just (Value (Constant c))
+
+                Nothing ->
+                    case cellIndex of
+                        Just f ->
+                            Just (Value (CellIndex f))
+
+                        Nothing ->
+                            Nothing
     in
-    case cellIndex of
+    case literal of
         Just c ->
-            Just (Value c)
+            Just c
 
         Nothing ->
             let
@@ -182,7 +203,7 @@ toExpression exprString =
                 operator =
                     toOperation firstOperator
             in
-            Maybe.map3 (\c o cc -> SubExpression c o cc)
+            Maybe.map3 (\c o cc -> SubExpression (CellIndex c) o cc)
                 operandIndex
                 operator
                 (toExpression restOfTheExpression)
@@ -191,11 +212,17 @@ toExpression exprString =
 toExpressionString : Expression -> String
 toExpressionString expr =
     case expr of
-        Value cellIndex ->
+        Value (CellIndex cellIndex) ->
             fromCellIndex cellIndex
 
-        SubExpression cellIndex operator restOfTheExpression ->
+        Value (Constant constant) ->
+            String.fromFloat constant
+
+        SubExpression (CellIndex cellIndex) operator restOfTheExpression ->
             fromCellIndex cellIndex ++ fromOperation operator ++ toExpressionString restOfTheExpression
+
+        SubExpression (Constant constant) operator restOfTheExpression ->
+            String.fromFloat constant ++ fromOperation operator ++ toExpressionString restOfTheExpression
 
 
 findCellFromCellIndex :
@@ -246,15 +273,23 @@ evaluateExpression :
     -> Maybe Float
 evaluateExpression expr cells =
     case expr of
-        Value cellIndex ->
+        Value (CellIndex cellIndex) ->
             getValueFromCellIndex
                 cellIndex
                 cells
 
-        SubExpression cellIndex operator restOfTheExpr ->
+        Value (Constant value) ->
+            Just value
+
+        SubExpression literal operator restOfTheExpr ->
             let
                 valueOfFirstOperand =
-                    getValueFromCellIndex cellIndex cells
+                    case literal of
+                        CellIndex cellIndex ->
+                            getValueFromCellIndex cellIndex cells
+
+                        Constant c ->
+                            Just c
 
                 valueOfRestOfTheExpr =
                     evaluateExpression restOfTheExpr cells

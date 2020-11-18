@@ -43,8 +43,8 @@ suite =
                         |> Main.toExpression
                         |> Expect.equal
                             (Just
-                                (Main.Value
-                                    ( 1, "A" )
+                                (Main.Value <|
+                                    Main.CellIndex ( 1, "A" )
                                 )
                             )
             , test "works for binary operations" <|
@@ -54,9 +54,9 @@ suite =
                         |> Expect.equal
                             (Just
                                 (Main.SubExpression
-                                    ( 1, "A" )
+                                    (Main.CellIndex ( 1, "A" ))
                                     Main.Multiply
-                                    (Main.Value ( 2, "A" ))
+                                    (Main.Value <| Main.CellIndex ( 2, "A" ))
                                 )
                             )
             , test "works for compound operations" <|
@@ -66,12 +66,12 @@ suite =
                         |> Expect.equal
                             (Just
                                 (Main.SubExpression
-                                    ( 1, "A" )
+                                    (Main.CellIndex ( 1, "A" ))
                                     Main.Multiply
                                     (Main.SubExpression
-                                        ( 2, "A" )
+                                        (Main.CellIndex ( 2, "A" ))
                                         Main.Subtract
-                                        (Main.Value ( 3, "A" ))
+                                        (Main.Value (Main.CellIndex ( 3, "A" )))
                                     )
                                 )
                             )
@@ -82,21 +82,21 @@ suite =
                         |> Expect.equal
                             (Just
                                 (Main.SubExpression
-                                    ( 1, "A" )
+                                    (Main.CellIndex ( 1, "A" ))
                                     Main.Multiply
                                     (Main.SubExpression
-                                        ( 2, "A" )
+                                        (Main.CellIndex ( 2, "A" ))
                                         Main.Subtract
                                         (Main.SubExpression
-                                            ( 3, "A" )
+                                            (Main.CellIndex ( 3, "A" ))
                                             Main.Divide
                                             (Main.SubExpression
-                                                ( 4, "A" )
+                                                (Main.CellIndex ( 4, "A" ))
                                                 Main.Multiply
                                                 (Main.SubExpression
-                                                    ( 3, "C" )
+                                                    (Main.CellIndex ( 3, "C" ))
                                                     Main.Multiply
-                                                    (Main.Value ( 6, "N" ))
+                                                    (Main.Value (Main.CellIndex ( 6, "N" )))
                                                 )
                                             )
                                         )
@@ -135,26 +135,31 @@ suite =
              [ test "works for simple case" <|
                 \_ ->
                     testCells
-                        |> Main.evaluateExpression (Main.SubExpression ( 1, "A" ) Main.Sum (Main.Value ( 2, "A" )))
+                        |> Main.evaluateExpression (Main.SubExpression (Main.CellIndex ( 1, "A" )) Main.Sum (Main.Value (Main.CellIndex ( 2, "A" ))))
                         |> Expect.equal (Just 246.0)
              , test "works for complex case" <|
                 \_ ->
                     testCells
                         |> Main.evaluateExpression
                             (Main.SubExpression
-                                ( 1, "A" )
+                                (Main.CellIndex ( 1, "A" ))
                                 Main.Sum
                                 (Main.SubExpression
-                                    ( 2, "A" )
+                                    (Main.CellIndex ( 2, "A" ))
                                     Main.Sum
                                     (Main.SubExpression
-                                        ( 5, "C" )
+                                        (Main.CellIndex ( 5, "C" ))
                                         Main.Multiply
-                                        (Main.Value ( 3, "A" ))
+                                        (Main.Value (Main.CellIndex ( 3, "A" )))
                                     )
                                 )
                             )
                         |> Expect.equal (Just 234.0)
+             , test "works with constants" <|
+                \_ ->
+                    testCells
+                        |> Main.evaluateExpression (Main.SubExpression (Main.CellIndex ( 1, "A" )) Main.Sum (Main.Value (Main.Constant 3)))
+                        |> Expect.equal (Just 126)
              ]
             )
         , describe "resolveCellOutput and showValue"
@@ -189,7 +194,7 @@ suite =
                         ]
 
                 cell =
-                    { value = "=A1+A2+B5-B5-A3"
+                    { value = "=A1+A2+B5-B5-A3+2"
                     , output = Main.PlainValue ""
                     , index = ( 1, "C" )
                     , editing = False
@@ -204,7 +209,7 @@ suite =
                         value =
                             Main.showValue resolvedCell testCells
                     in
-                    Expect.equal value "248"
+                    Expect.equal value "250"
              ]
             )
         ]
