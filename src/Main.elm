@@ -273,9 +273,9 @@ evaluateExpression :
     -> Maybe Float
 evaluateExpression expr cells =
     case expr of
-        Value (CellIndex cellIndex) ->
+        Value (CellIndex ( rowIndex, colIndex )) ->
             getValueFromCellIndex
-                cellIndex
+                ( rowIndex + 1, colIndex )
                 cells
 
         Value (Constant value) ->
@@ -285,8 +285,8 @@ evaluateExpression expr cells =
             let
                 valueOfFirstOperand =
                     case literal of
-                        CellIndex cellIndex ->
-                            getValueFromCellIndex cellIndex cells
+                        CellIndex ( rowIndex, colIndex ) ->
+                            getValueFromCellIndex ( rowIndex + 1, colIndex ) cells
 
                         Constant c ->
                             Just c
@@ -377,7 +377,8 @@ init v =
             Array.fromList
                 (List.range
                     1
-                    noOfRows
+                    (noOfRows + 1)
+                    -- +1 for column headers row
                     |> List.concatMap
                         (\i ->
                             List.map
@@ -483,11 +484,11 @@ showValue cell cells =
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ text "spreadsheet"
+    div [ style "padding" "6px" ]
+        [ h2 [] [ text "KashCal - A spreadsheet" ]
         , model.cells
             |> spreadSheetView
-            |> div [ style "overflow" "auto" ]
+            |> div [ style "overflow" "auto", style "padding" "8px" ]
         ]
 
 
@@ -507,11 +508,37 @@ spreadSheetView cells =
 rowView : List Cell -> Int -> Array Cell -> Html Msg
 rowView row rowIndex cells =
     div [ style "white-space" "nowrap" ]
-        (List.indexedMap
-            (\colIndex cell ->
-                cellView cells cell (26 * rowIndex + colIndex)
-            )
-            row
+        (input
+            [ value <|
+                if rowIndex == 0 then
+                    ""
+
+                else
+                    String.fromInt rowIndex
+            , disabled True
+            , style "width" "30px"
+            , style "text-align" "right"
+            ]
+            []
+            :: (if rowIndex == 0 then
+                    List.indexedMap
+                        (\colIndex cell ->
+                            input
+                                [ value <| String.fromChar <| Char.fromCode (65 + colIndex)
+                                , disabled True
+                                , style "width" "75px"
+                                ]
+                                []
+                        )
+                        row
+
+                else
+                    List.indexedMap
+                        (\colIndex cell ->
+                            cellView cells cell (26 * rowIndex + colIndex)
+                        )
+                        row
+               )
         )
 
 
@@ -522,5 +549,6 @@ cellView cells cell index =
         , onClick <| CellEditable index
         , onBlur <| CellUnEditable index
         , onInput <| CellValueChanged index
+        , style "width" "75px"
         ]
         []
