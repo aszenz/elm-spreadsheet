@@ -261,8 +261,8 @@ getValueFromCellIndex cellIndex cells =
                         Just
                             v
 
-                    ComputedValue v ->
-                        Nothing
+                    ComputedValue expr ->
+                        Just <| expressionResult expr cells
             )
         |> Maybe.andThen String.toFloat
 

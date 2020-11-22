@@ -3,10 +3,11 @@
 ## Yet to do
 
 - Expression Language
-  - Explore supporting expressions referring to other expression values
+  - Detect and error out on recursive references in cells
   - Explore a performant architecture for updating cells and recalculating expressions
     - [How to recalculate a spreadsheet](https://lord.io/blog/2020/spreadsheets/)
     - [Write your own excel in 100 lines of F#](http://tomasp.net/blog/2018/write-your-own-excel/)
+  - Build a small parser combinator library to parse the expression language 
   - Add BODMAS based expression evaluation
   - Allow whitespace in expressions
   - Add support for range based formulas
